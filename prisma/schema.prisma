@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(uuid())
+  externalId     String?   @unique
+  email          String    @unique
+  name           String?
+  role           Role      @relation(fields: [roleId], references: [id])
+  roleId         Int
+  department     Department? @relation(fields: [departmentId], references: [id])
+  departmentId   Int?
+  assignments    Assignment[]
+  progress       Progress[]
+  certifications CertificationAssignment[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Role {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  users User[]
+}
+
+model Department {
+  id    Int     @id @default(autoincrement())
+  name  String  @unique
+  users User[]
+  paths LearningPath[]
+  kbArticles KBArticle[]
+}
+
+model LearningPath {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  departmentId Int?
+  modules      Module[] 
+  assignments  Assignment[]
+  published    Boolean  @default(false)
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Module {
+  id            String   @id @default(uuid())
+  title         String
+  order         Int
+  learningPath  LearningPath @relation(fields: [learningPathId], references: [id])
+  learningPathId String
+  lessons       Lesson[]
+}
+
+model Lesson {
+  id        String @id @default(uuid())
+  title     String
+  order     Int
+  type      LessonType
+  content   Json?
+  module    Module  @relation(fields: [moduleId], references: [id])
+  moduleId  String
+  duration  Int?
+}
+
+enum LessonType {
+  VIDEO
+  DOCUMENT
+  QUIZ
+  CHECKLIST
+  ASSIGNMENT
+}
+
+model Assignment {
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String
+  learningPath  LearningPath @relation(fields: [learningPathId], references: [id])
+  learningPathId String
+  assignedById  String?
+  assignedBy    User?    @relation("AssignedBy", fields: [assignedById], references: [id])
+  dueDate       DateTime?
+  status        AssignmentStatus @default(IN_PROGRESS)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum AssignmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+model Progress {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  lesson    Lesson   @relation(fields: [lessonId], references: [id])
+  lessonId  String
+  status    ProgressStatus @default(NOT_STARTED)
+  startedAt DateTime?
+  completedAt DateTime?
+  evidence  String?
+  updatedAt DateTime @updatedAt
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model KBArticle {
+  id           String   @id @default(uuid())
+  title        String
+  content      String
+  summary      String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  departmentId Int?
+  tags         String[] @default([])
+  attachments  Attachment[]
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+  published    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Attachment {
+  id        String @id @default(uuid())
+  filename  String
+  url       String
+  size      Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+  article   KBArticle? @relation(fields: [articleId], references: [id])
+  articleId String?
+}
+
+model Certification {
+  id          String @id @default(uuid())
+  name        String
+  description String?
+  validityDays Int?
+  createdAt   DateTime @default(now())
+  assignments CertificationAssignment[]
+}
+
+model CertificationAssignment {
+  id              String @id @default(uuid())
+  user            User   @relation(fields: [userId], references: [id])
+  userId          String
+  certification   Certification @relation(fields: [certificationId], references: [id])
+  certificationId String
+  issuedAt        DateTime @default(now())
+  expiresAt       DateTime?
+  issuedById      String?
+  issuedBy        User? @relation("CertIssuedBy", fields: [issuedById], references: [id])
+}
+
+model AuditLog {
+  id        String @id @default(uuid())
+  actorId   String?
+  actor     User?  @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  data      Json?
+  createdAt DateTime @default(now())
+}
