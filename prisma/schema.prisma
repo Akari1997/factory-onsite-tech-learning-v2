@@ -8,19 +8,24 @@ datasource db {
 }
 
 model User {
-  id             String    @id @default(uuid())
-  externalId     String?   @unique
-  email          String    @unique
-  name           String?
-  role           Role      @relation(fields: [roleId], references: [id])
-  roleId         Int
-  department     Department? @relation(fields: [departmentId], references: [id])
-  departmentId   Int?
-  assignments    Assignment[]
-  progress       Progress[]
-  certifications CertificationAssignment[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                 String                    @id @default(uuid())
+  externalId         String?                   @unique
+  email              String                    @unique
+  name               String?
+  role               Role                      @relation(fields: [roleId], references: [id])
+  roleId             Int
+  department         Department?               @relation(fields: [departmentId], references: [id])
+  departmentId       Int?
+  assignments        Assignment[]              @relation("AssignmentUser")
+  assignedAssignments Assignment[]             @relation("AssignedBy")
+  progress           Progress[]
+  certifications     CertificationAssignment[] @relation("CertificationUser")
+  issuedCertifications CertificationAssignment[] @relation("CertificationIssuer")
+  createdPaths       LearningPath[]            @relation("LearningPathCreator")
+  createdArticles    KBArticle[]               @relation("KBArticleCreator")
+  auditLogs          AuditLog[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
 }
 
 model Role {
@@ -30,46 +35,47 @@ model Role {
 }
 
 model Department {
-  id    Int     @id @default(autoincrement())
-  name  String  @unique
-  users User[]
-  paths LearningPath[]
+  id         Int            @id @default(autoincrement())
+  name       String         @unique
+  users      User[]
+  paths      LearningPath[]
   kbArticles KBArticle[]
 }
 
 model LearningPath {
-  id           String   @id @default(uuid())
+  id           String      @id @default(uuid())
   title        String
   description  String?
   department   Department? @relation(fields: [departmentId], references: [id])
   departmentId Int?
-  modules      Module[] 
+  modules      Module[]
   assignments  Assignment[]
-  published    Boolean  @default(false)
+  published    Boolean     @default(false)
   createdById  String?
-  createdBy    User?    @relation(fields: [createdById], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdBy    User?       @relation("LearningPathCreator", fields: [createdById], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 }
 
 model Module {
-  id            String   @id @default(uuid())
+  id            String       @id @default(uuid())
   title         String
   order         Int
-  learningPath  LearningPath @relation(fields: [learningPathId], references: [id])
+  learningPath  LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
   learningPathId String
   lessons       Lesson[]
 }
 
 model Lesson {
-  id        String @id @default(uuid())
+  id        String     @id @default(uuid())
   title     String
   order     Int
   type      LessonType
   content   Json?
-  module    Module  @relation(fields: [moduleId], references: [id])
+  module    Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   moduleId  String
   duration  Int?
+  progress  Progress[]
 }
 
 enum LessonType {
@@ -81,17 +87,20 @@ enum LessonType {
 }
 
 model Assignment {
-  id            String   @id @default(uuid())
-  user          User     @relation(fields: [userId], references: [id])
+  id            String           @id @default(uuid())
+  user          User             @relation("AssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
   userId        String
-  learningPath  LearningPath @relation(fields: [learningPathId], references: [id])
+  learningPath  LearningPath     @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
   learningPathId String
   assignedById  String?
-  assignedBy    User?    @relation("AssignedBy", fields: [assignedById], references: [id])
+  assignedBy    User?            @relation("AssignedBy", fields: [assignedById], references: [id])
   dueDate       DateTime?
-  status        AssignmentStatus @default(IN_PROGRESS)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status        AssignmentStatus @default(NOT_STARTED)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([userId, learningPathId])
+  @@index([userId, status])
 }
 
 enum AssignmentStatus {
@@ -102,16 +111,19 @@ enum AssignmentStatus {
 }
 
 model Progress {
-  id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  lesson    Lesson   @relation(fields: [lessonId], references: [id])
-  lessonId  String
-  status    ProgressStatus @default(NOT_STARTED)
-  startedAt DateTime?
+  id          String         @id @default(uuid())
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  lesson      Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lessonId    String
+  status      ProgressStatus @default(NOT_STARTED)
+  startedAt   DateTime?
   completedAt DateTime?
-  evidence  String?
-  updatedAt DateTime @updatedAt
+  evidence    String?
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([userId, lessonId])
+  @@index([userId, status])
 }
 
 enum ProgressStatus {
@@ -121,60 +133,63 @@ enum ProgressStatus {
 }
 
 model KBArticle {
-  id           String   @id @default(uuid())
+  id           String       @id @default(uuid())
   title        String
   content      String
   summary      String?
-  department   Department? @relation(fields: [departmentId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
   departmentId Int?
-  tags         String[] @default([])
+  tags         String[]     @default([])
   attachments  Attachment[]
   createdById  String?
-  createdBy    User?    @relation(fields: [createdById], references: [id])
-  published    Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdBy    User?        @relation("KBArticleCreator", fields: [createdById], references: [id])
+  published    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
 model Attachment {
-  id        String @id @default(uuid())
+  id        String     @id @default(uuid())
   filename  String
   url       String
   size      Int?
   mimeType  String?
-  createdAt DateTime @default(now())
-  article   KBArticle? @relation(fields: [articleId], references: [id])
+  createdAt DateTime   @default(now())
+  article   KBArticle? @relation(fields: [articleId], references: [id], onDelete: Cascade)
   articleId String?
 }
 
 model Certification {
-  id          String @id @default(uuid())
-  name        String
-  description String?
+  id           String                    @id @default(uuid())
+  name         String
+  description  String?
   validityDays Int?
-  createdAt   DateTime @default(now())
-  assignments CertificationAssignment[]
+  createdAt    DateTime                  @default(now())
+  assignments  CertificationAssignment[]
 }
 
 model CertificationAssignment {
-  id              String @id @default(uuid())
-  user            User   @relation(fields: [userId], references: [id])
+  id              String         @id @default(uuid())
+  user            User           @relation("CertificationUser", fields: [userId], references: [id], onDelete: Cascade)
   userId          String
-  certification   Certification @relation(fields: [certificationId], references: [id])
+  certification   Certification  @relation(fields: [certificationId], references: [id], onDelete: Cascade)
   certificationId String
-  issuedAt        DateTime @default(now())
+  issuedAt        DateTime       @default(now())
   expiresAt       DateTime?
   issuedById      String?
-  issuedBy        User? @relation("CertIssuedBy", fields: [issuedById], references: [id])
+  issuedBy        User?          @relation("CertificationIssuer", fields: [issuedById], references: [id])
 }
 
 model AuditLog {
-  id        String @id @default(uuid())
+  id        String   @id @default(uuid())
   actorId   String?
-  actor     User?  @relation(fields: [actorId], references: [id])
+  actor     User?    @relation(fields: [actorId], references: [id])
   action    String
   entity    String
   entityId  String?
   data      Json?
   createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
 }
